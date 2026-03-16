@@ -62,9 +62,17 @@ description: 提供 Torch 与 torch_npu 算子 API 支持度查询、**单算子
 - 对于 `torch_npu.npu_*` 算子，使用 [torch_npu接口列表](https://www.hiascend.com/document/detail/zh/Pytorch/730/apiref/torchnpuCustomsapi/docs/context/torch_npu_list.md) 查找对应文档页，提取准确的参数列表和约束。这里的列表中如果找到对应的算子，根据其子索引列表继续查找网页文档，精准获取准确的 api 文档链接。
 - 对于 `torch.ops.npu.*` 算子，若官方文档未提供，则根据已有经验或本 Skill 的 reference 生成合理示例，并在注释中说明“可能因版本差异而变化”。
 
-脚本生成时，**禁止简化签名**，必须与官方 API 一致。
-
 ---
+
+#### 2.3 针对 torch_npu.npu_xxx 接口的硬性流程
+
+- **若用户给出完整的 `torch_npu.xxx` 名称（例如 `torch_npu.npu_grouped_matmul`）时，必须执行以下步骤：**
+  1. 在 Ascend 官方文档站中精确定位该接口的文档页，例如
+     `https://www.hiascend.com/document/detail/zh/Pytorch/730/apiref/torchnpuCustomsapi/docs/context/torch_npu-npu_grouped_matmul.md`；
+  2. 以文档中的 **Python 函数原型、参数表、返回值说明、dtype 约束、split_item / group_list / group_type / group_list_type 等语义** 为唯一权威来源；
+  3. 生成单算子脚本和入参/返回值说明时，**禁止臆造签名或简化输入形态**（例如将 `List[Tensor]` 随意当成单个高维 Tensor 使用），必须与官方签名一一对应；
+  4. 若本 Skill 的 reference 与官方文档存在不一致，应在回答中以官方文档为准，并建议维护者更新本 Skill 内的 reference 内容。
+
 
 ## 3. 单算子测试脚本生成详解
 
