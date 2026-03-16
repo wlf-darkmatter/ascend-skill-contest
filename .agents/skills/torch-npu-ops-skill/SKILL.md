@@ -32,10 +32,10 @@ description: 提供 Torch 与 torch_npu 算子 API 支持度查询、**单算子
 1. **解析用户意图**：
    - 用户是否明确给出了**具体算子名称**（如 `torch.softmax`、`torch_npu.npu_softmax`、`torch.ops.npu.*`）？
    - 用户是否直接要求“脚本”、“示例”、“测试用例”？
-   - 若用户只是询问“是否支持”，可以快速给出支持度结论后，**主动询问是否需要测试脚本**，或直接附带一个最小脚本。
+   - 若用户只是询问“是否支持”，可以快速给出支持度结论后，**主动询问是否需要测试脚本**，或直接附带一个最小脚本写入到`tests`目录中。
 2. **收集版本信息（如果可用）**：
    - 若对话中已有版本信息（例如日志、`pip list`、`npu-smi info` 等），提取 `torch.__version__`、`torch_npu.__version__`、CANN 版本，用于后续兼容性提示。
-   - 若用户未提供，则生成脚本时在注释中说明“请根据你的环境调整版本相关检查”。
+   - 若用户未提供，则尝试运行相关命令获取对应的版本信息 (例如`python -c "import torch_npu; print(torch_npu.__version__)"`)。
 3. **核心输出：生成单算子测试脚本**：
    - 根据算子类型（Torch 原生 / torch_npu 自定义 / torch.ops.npu 自定义），选择合适的脚本模板，填充参数和输入。
    - 脚本必须包含：
@@ -55,30 +55,95 @@ description: 提供 Torch 与 torch_npu 算子 API 支持度查询、**单算子
 
 ---
 
-### 2.2 官方 torch_npu 自定义 API 文档的使用
+### 2.2 官方 torch_npu 自定义 API 文档的**使用原则（禁止自行脑补原型）**
 
-在生成 `torch_npu.npu_xxx` 或 `torch.ops.npu.xxx` 的脚本时，必须严格遵循官方文档中的函数签名和参数要求。为此：
+在生成 `torch_npu.npu_xxx` 或 `torch.ops.npu.xxx` 的脚本时，**严禁根据“函数原型文字描述”自行推导/改写参数列表**，而是要：
 
-- 对于 `torch_npu.npu_*` 算子，使用 [torch_npu接口列表](https://www.hiascend.com/document/detail/zh/Pytorch/730/apiref/torchnpuCustomsapi/docs/context/torch_npu_list.md) 查找对应文档页，提取准确的参数列表和约束。这里的列表中如果找到对应的算子，根据其子索引列表继续查找网页文档，精准获取准确的 api 文档链接。
-- 对于 `torch.ops.npu.*` 算子，若官方文档未提供，则根据已有经验或本 Skill 的 reference 生成合理示例，并在注释中说明“可能因版本差异而变化”。
+1. **优先定位“官方最小可运行示例”代码块**，并做到：
+   - 逐行**原样照抄调用语句**（尤其是函数名、参数个数与顺序、关键字参数名），不得增删参数；
+   - 只允许对「张量创建方式 / shape / dtype / 具体数值」做轻微调整以适配当前测试场景；
+   - 不根据“参数说明表格”或“函数原型”自行添加任何新参数。
+2. 若同一算子在不同 CANN / torch_npu 版本文档中存在差异：
+   - 若用户已给出版本信息，则**尽量选择对应版本的官方文档**；
+   - 若版本不明确，则在回答中显式声明：**“以下示例基于文档版本 X.Y，其他版本可能有差异”**，但**仍然严格使用该版本文档中的示例代码，不自行改写签名**。
+3. 对于 `torch_npu.npu_*` 算子：
+   - 使用 [torch_npu 接口列表](https://www.hiascend.com/document/detail/zh/Pytorch/730/apiref/torchnpuCustomsapi/docs/context/torch_npu_list.md) 仅作为**定位文档入口**；
+   - 真正用于拼接测试脚本的调用方式，应来源于该页中的**“示例代码”**片段，而不是页头的原型行。
+4. 对于 `torch.ops.npu.*` 算子：
+   - 若官方文档中也提供了示例，同样**优先逐字照抄示例调用**；
+   - 若没有任何官方示例、只有函数原型或经验性描述，则：
+     - 生成脚本时仅使用**文档中明确标记为必填的最小参数集合**；
+     - 不随意添加文档未提及的可选参数；
+     - 在注释中显式添加：`# 注意：该示例基于文档推断，可能因版本差异导致参数不匹配，请以实际报错为准并参考官方最新示例。`
+
+> **强约束**：  
+> - **不要**自己重新翻译/重写函数原型来“优化”调用方式；  
+> - **不要**因为觉得“示例里少传了某个你认为重要的参数”就擅自加参数；  
+> - 如果不确定，就在脚本注释和回答文字中明确“不确定点”，而不是假装确定。
 
 ---
-
-#### 2.3 针对 torch_npu.npu_xxx 接口的硬性流程
-
-- **若用户给出完整的 `torch_npu.xxx` 名称（例如 `torch_npu.npu_grouped_matmul`）时，必须执行以下步骤：**
-  1. 在 Ascend 官方文档站中精确定位该接口的文档页，例如
-     `https://www.hiascend.com/document/detail/zh/Pytorch/730/apiref/torchnpuCustomsapi/docs/context/torch_npu-npu_grouped_matmul.md`；
-  2. 以文档中的 **Python 函数原型、参数表、返回值说明、dtype 约束、split_item / group_list / group_type / group_list_type 等语义** 为唯一权威来源；
-  3. 生成单算子脚本和入参/返回值说明时，**禁止臆造签名或简化输入形态**（例如将 `List[Tensor]` 随意当成单个高维 Tensor 使用），必须与官方签名一一对应；
-  4. 若本 Skill 的 reference 与官方文档存在不一致，应在回答中以官方文档为准，并建议维护者更新本 Skill 内的 reference 内容。
 
 
 ## 3. 单算子测试脚本生成详解
 
-### 3.1 脚本通用模板
+> **最高优先级原则**：  
+> - **若官方文档有可直接运行的最小示例代码块**，则以该示例为准，做“最小改动包装”；  
+> - **只有当官方没有完整可运行示例**时，才退回到通用模板，并且在调用处严格遵循 2.2 中的“不要脑补签名”规则。
 
-所有生成的脚本应遵循以下结构（可根据算子特性微调）：
+### 3.1 情况 A：基于官方最小示例进行包装（推荐）
+
+当官方文档中已经提供了可运行的示例（含张量创建 + 算子调用）时，应按如下方式生成测试脚本：
+
+1. **完整拷贝示例中的 import & 张量构造 & 算子调用代码**；
+2. 在外部增加少量包装，例如：
+   - 环境检查函数（可选、简单版即可）；
+   - 主函数 `main()`；
+   - 可选的 CPU 对比和误差打印；
+3. 不改变原有的调用行，只在其前后补充逻辑。
+
+示意结构（伪代码示例，仅说明包装方式，不代表具体算子）：
+
+```python
+import torch
+import torch_npu
+
+def check_env():
+    print("Torch:", torch.__version__)
+    print("torch_npu:", torch_npu.__version__)
+    if not (hasattr(torch, "npu") and torch.npu.is_available()):
+        raise RuntimeError("NPU 不可用，请先确认 CANN/torch_npu 环境。")
+
+def main():
+    check_env()
+
+    # ===== 以下代码块应来自官方示例，调用行逐字保持一致 =====
+    # 官方示例中的张量创建与算子调用（可仅对 shape/数据做轻微调整）
+    x = torch.randn(2, 3, 4)           # 来自官方示例
+    x_npu = x.to("npu")               # 如官方示例已有则照抄，没有则按最小改动补上
+    y_npu = torch.ops.npu.xxx(x_npu)  # ★ 调用行必须与官方示例保持相同参数列表
+    # ===== 官方示例结束 =====
+
+    # 可选：CPU baseline 对比
+    x_cpu = x
+    y_cpu = some_cpu_impl(x_cpu)      # 若官方无 CPU 对比，可使用等价 PyTorch 实现
+    print("NPU result:", y_npu[:1].cpu())
+    print("CPU result:", y_cpu[:1])
+
+if __name__ == "__main__":
+    main()
+```
+
+> 关键点：**只在外围包一层，核心调用行不做“自认为更合理”的修改。**
+
+### 3.2 情况 B：官方没有完整示例时使用的通用模板
+
+仅当官方文档**没有给出可直接运行的示例代码**时，才使用下面的通用模板作为兜底，并且：
+
+- 调用行仅使用文档中明确给出的必选参数；
+- 不新增文档未出现的参数；
+- 在脚本注释中标记“不完全确定”的地方，提醒用户以实际错误信息为准。
+
+推荐结构如下：
 
 ```python
 import torch
@@ -107,8 +172,9 @@ def main():
     x_npu = x_cpu.to("npu")
 
     # 3. 调用算子（NPU）
-    #   请替换为实际算子调用
-    y_npu = torch.softmax(x_npu, dim=-1)  # 示例：torch.softmax
+    #   请根据官方文档中给出的函数原型和“必选参数列表”替换下面这一行，
+    #   严禁凭感觉添加额外参数。如果文档只有原型而无示例，请在回答文字中说明这一点。
+    y_npu = torch.softmax(x_npu, dim=-1)  # 示例：请替换为目标算子调用
 
     # 4. 构造 CPU Baseline（使用 Torch 原生 API 或组合实现）
     y_cpu = torch.softmax(x_cpu, dim=-1)  # 同一算子 CPU 版本
@@ -130,62 +196,19 @@ if __name__ == "__main__":
     main()
 
 ```
-### 3.2 根据算子类型调整
-
-#### 3.2.1 Torch 原生算子（如 `torch.add`, `torch.bmm`, `torch.nn.functional.layer_norm`）
-
-- 直接使用模板，将算子调用替换为对应的 Torch API。
-- CPU Baseline 直接用同一 API 在 CPU 上执行。
-- 注意 NPU 上可能的数据类型限制（如仅支持 float16/float32），在生成输入时指定合适的 dtype。
-
-#### 3.2.2 torch_npu 自定义 API（如 `torch_npu.npu_softmax`）
-
-- 必须导入 `torch_npu`。
-- 在调用时使用正确的 API 名称和参数（例如 `torch_npu.npu_softmax(x_npu, axis=-1)`）。
-- CPU Baseline 可以使用 Torch 原生对应功能（如 `torch.softmax`）作为参考。
-- 如果算子没有 CPU 对应版本（如 `npu_format_cast`），则无法做数值对比，可以在脚本中仅打印输出形状或注释说明。
-
-#### 3.2.3 torch.ops.npu 自定义算子（如 `torch.ops.npu.layer_norm_v3`）
-
-- 调用方式：`torch.ops.npu.layer_norm_v3(x_npu, normalized_shape, weight, bias, eps)`
-- 需要根据文档构造正确的输入列表（可能涉及 `List[Tensor]` 等）。
-- CPU Baseline 可以用组合算子模拟，或者不做对比（仅打印输出），但要说明原因。
-
-#### 3.2.4 处理 `List[Tensor]` 等复杂输入
-
-- 对于接受 Tensor 列表的算子（如分组 MatMul），必须构造列表输入，不能拼接成单个 Tensor。
-
-- 脚本中应使用列表推导式生成多个 Tensor，例如：
-
-  python
-
-  ```
-  num_groups = 2
-  x_list = [torch.randn(4, 8).to("npu") for _ in range(num_groups)]
-  w_list = [torch.randn(8, 16).to("npu") for _ in range(num_groups)]
-  out_list = torch.ops.npu.grouped_matmul(x_list, w_list)
-  ```
-
-
 
 ### 3.3 脚本中嵌入版本兼容性提示
 
 如果用户提供了版本信息且与官方推荐组合不符，应在脚本前添加注释说明风险，例如：
 
-python
-
-```
+```python
 # 注意：当前环境 CANN 7.0, torch 2.0, torch_npu 2.0 与官方推荐组合 (CANN 8.0 + torch 2.3 + torch_npu 2.3) 有差异，
 # 该算子可能在当前环境中存在限制或不可用。请根据实际运行结果判断。
 ```
 
-
-
 如果用户未提供版本，则在脚本开头添加通用提示：
 
-python
-
-```
+```python
 # 请确保你的环境已正确安装 CANN 和 torch_npu，并且版本匹配。
 # 运行前请执行 `source /usr/local/Ascend/ascend-toolkit/set_env.sh` 等环境脚本。
 ```
