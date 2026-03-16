@@ -20,8 +20,8 @@
 
 | 题目 | 难度 | 预估时长 |
 |------|------|----------|
-| [题目1: 训练框架 Profiling 采集](training/question1.md) | ⭐ 初等 | 60 分钟 |
-| [题目2: Verl 部署](training/question2.md) | ⭐⭐ 中等 | 90 分钟 |
+| [题目1: Verl 部署](training/question1.md) | ⭐⭐ 中等 | 90 分钟 |
+| [题目2: 训练框架 Profiling 采集](training/question2.md) | ⭐ 初等 | 60 分钟 |
 | [题目3: 模型迁移（GPU → 昇腾 NPU）](training/question3.md) | ⭐⭐ 中等 | 90 分钟 |
 
 ## 参赛流程
